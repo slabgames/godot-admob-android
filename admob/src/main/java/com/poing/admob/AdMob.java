@@ -35,6 +35,7 @@ import com.google.android.gms.ads.AdView; //used to banner ads
 import com.google.android.gms.ads.AdSize; //used to set/get size banner ads
 import com.google.android.gms.ads.AdListener; //used to get events of ads (banner, interstitial)
 
+import com.google.android.gms.ads.appopen.AppOpenAd;
 import com.google.android.gms.ads.initialization.AdapterStatus;
 import com.google.android.gms.ads.interstitial.InterstitialAd; //interstitialAd
 import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback;
@@ -51,6 +52,7 @@ import com.google.android.ump.ConsentRequestParameters;
 import com.google.android.ump.UserMessagingPlatform;
 
 import android.app.Activity;
+import android.graphics.LinearGradient;
 import android.graphics.Rect;
 import android.os.Build;
 import android.util.DisplayMetrics;
@@ -64,11 +66,16 @@ import android.view.View;
 import android.provider.Settings;
 import androidx.annotation.NonNull;
 import androidx.collection.ArraySet;
+import androidx.lifecycle.Lifecycle;
+import androidx.lifecycle.LifecycleObserver;
+import androidx.lifecycle.OnLifecycleEvent;
+import androidx.lifecycle.ProcessLifecycleOwner;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -101,6 +108,35 @@ public class AdMob extends org.godotengine.godot.plugin.GodotPlugin {
     private RewardedAd aRewardedAd;
     private RewardedInterstitialAd aRewardedInterstitialAd;
 
+    private AppOpenAd appOpenAd = null;
+    private String appOpenId = null;
+    private boolean isLoadingAd = false;
+    private boolean isShowingAd = false;
+    /** Keep track of the time an app open ad is loaded to ensure you don't show an expired ad. */
+    private long loadTime = 0;
+    private OnShowAdCompleteListener onShowAdCompleteListener;
+
+    /** Utility method to check if ad was loaded more than n hours ago. */
+    private boolean wasLoadTimeLessThanNHoursAgo(long numHours) {
+        long dateDifference = (new Date()).getTime() - this.loadTime;
+        long numMilliSecondsPerHour = 3600000;
+        return (dateDifference < (numMilliSecondsPerHour * numHours));
+    }
+
+
+    /** Interface definition for a callback to be invoked when an app open ad is complete. */
+    public interface OnShowAdCompleteListener {
+        void onShowAdComplete();
+    }
+
+    /** Check if ad exists and can be shown. */
+    public boolean isAdAvailable() {
+        return appOpenAd != null && wasLoadTimeLessThanNHoursAgo(4);
+    }
+
+
+
+
     public AdMob(Godot godot) {
         super(godot);
     }
@@ -131,7 +167,10 @@ public class AdMob extends org.godotengine.godot.plugin.GodotPlugin {
                 "get_is_banner_loaded",
                 "get_is_interstitial_loaded",
                 "get_is_rewarded_loaded",
-                "get_is_rewarded_interstitial_loaded"
+                "get_is_rewarded_interstitial_loaded",
+                "load_app_open",
+                "show_app_open"
+
         );
     }
 
@@ -153,13 +192,31 @@ public class AdMob extends org.godotengine.godot.plugin.GodotPlugin {
     public String get_initialization_description() { 
         return aInitializationDesc; 
     }
+    /** Check if ad exists and can be shown. */
+    private boolean is_app_open_loaded() {
+        return appOpenAd != null;
+    }
 
     @Override
     public View onMainCreate(Activity pActivity) {
         aActivity = pActivity;
         aGodotLayout = new FrameLayout(pActivity);
+//        ProcessLifecycleOwner.get().getLifecycle().addObserver(this);
+        onShowAdCompleteListener = new OnShowAdCompleteListener() {
+            @Override
+            public void onShowAdComplete() {
+                Log.d(LOG_TAG_NAME,"on Show Ad Completed");
+            }
+        };
         return aGodotLayout;
     }
+
+//    @OnLifecycleEvent(Lifecycle.Event.ON_START)
+//    protected void onMoveToForeground() {
+//        // Show the ad (if available) when the app moves to foreground.
+//        show_app_open();
+//    }
+
 
     @NonNull
     @Override
@@ -211,6 +268,9 @@ public class AdMob extends org.godotengine.godot.plugin.GodotPlugin {
         signals.add(new SignalInfo("rewarded_interstitial_ad_clicked"));
         signals.add(new SignalInfo("rewarded_interstitial_ad_closed"));
         signals.add(new SignalInfo("rewarded_interstitial_ad_recorded_impression"));
+
+        signals.add(new SignalInfo("app_open_loaded"));
+        signals.add(new SignalInfo("app_open_failed_to_load",Integer.class));
 
         signals.add(new SignalInfo("user_earned_rewarded", String.class, Integer.class));
 
@@ -697,7 +757,107 @@ public class AdMob extends org.godotengine.godot.plugin.GodotPlugin {
             }
         });
     }
-    //
+
+    // APP OPEN
+    public void load_app_open(final String pAdUnitId) {
+        // Do not load ad if there is an unused ad or one is already loading.
+        if (isLoadingAd || is_app_open_loaded()) {
+            return;
+        }
+
+        appOpenId = pAdUnitId;
+
+        isLoadingAd = true;
+
+        aActivity.runOnUiThread(() -> {
+            AdRequest request = new AdRequest.Builder().build();
+            AppOpenAd.load(
+                    aActivity, pAdUnitId, request,
+                    AppOpenAd.APP_OPEN_AD_ORIENTATION_PORTRAIT,
+                    new AppOpenAd.AppOpenAdLoadCallback() {
+                        @Override
+                        public void onAdLoaded(AppOpenAd ad) {
+                            // Called when an app open ad has loaded.
+                            Log.d(LOG_TAG_NAME, "App Open Ad was loaded.");
+                            appOpenAd = ad;
+                            isLoadingAd = false;
+                            emitSignal("app_open_loaded");
+
+                            loadTime = (new Date()).getTime();
+                        }
+
+                        @Override
+                        public void onAdFailedToLoad(LoadAdError loadAdError) {
+                            // Called when an app open ad has failed to load.
+                            Log.d(LOG_TAG_NAME, loadAdError.getMessage());
+                            emitSignal("app_open_failed_to_load",loadAdError.getCode());
+                            isLoadingAd = false;
+                        }
+                    });
+        });
+
+    }
+
+
+    /** Shows the ad if one isn't already showing. */
+    public void show_app_open(){
+        // If the app open ad is already showing, do not show the ad again.
+        if (isShowingAd) {
+            Log.d(LOG_TAG_NAME, "The app open ad is already showing.");
+            return;
+        }
+
+        // If the app open ad is not available yet, invoke the callback then load the ad.
+        if (!is_app_open_loaded()) {
+            Log.d(LOG_TAG_NAME, "The app open ad is not ready yet.");
+            onShowAdCompleteListener.onShowAdComplete();
+            load_app_open(appOpenId);
+            return;
+        }
+
+        aActivity.runOnUiThread(() -> {
+            appOpenAd.setFullScreenContentCallback(
+                    new FullScreenContentCallback() {
+
+                        @Override
+                        public void onAdDismissedFullScreenContent() {
+                            // Called when fullscreen content is dismissed.
+                            // Set the reference to null so isAdAvailable() returns false.
+                            Log.d(LOG_TAG_NAME, "Ad dismissed fullscreen content.");
+                            appOpenAd = null;
+                            isShowingAd = false;
+
+                            onShowAdCompleteListener.onShowAdComplete();
+                            load_app_open(appOpenId);
+                        }
+
+                        @Override
+                        public void onAdFailedToShowFullScreenContent(AdError adError) {
+                            // Called when fullscreen content failed to show.
+                            // Set the reference to null so isAdAvailable() returns false.
+                            Log.d(LOG_TAG_NAME, adError.getMessage());
+                            appOpenAd = null;
+                            isShowingAd = false;
+
+                            onShowAdCompleteListener.onShowAdComplete();
+                            load_app_open(appOpenId);
+                        }
+
+                        @Override
+                        public void onAdShowedFullScreenContent() {
+                            // Called when fullscreen content is shown.
+                            Log.d(LOG_TAG_NAME, "Ad showed fullscreen content.");
+                        }
+                    });
+            isShowingAd = true;
+            appOpenAd.show(aActivity);
+        });
+
+    }
+
+
+
+    // REWARDED INTERSTITIAL
 
     public void load_rewarded_interstitial(final String pAdUnitId)
     {
