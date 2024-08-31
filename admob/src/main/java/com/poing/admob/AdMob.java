@@ -205,7 +205,7 @@ public class AdMob extends org.godotengine.godot.plugin.GodotPlugin {
         onShowAdCompleteListener = new OnShowAdCompleteListener() {
             @Override
             public void onShowAdComplete() {
-                Log.d(LOG_TAG_NAME,"on Show Ad Completed");
+                Log.d(LOG_TAG_NAME,"on app open Show Ad Completed");
             }
         };
         return aGodotLayout;
@@ -271,6 +271,7 @@ public class AdMob extends org.godotengine.godot.plugin.GodotPlugin {
 
         signals.add(new SignalInfo("app_open_loaded"));
         signals.add(new SignalInfo("app_open_failed_to_load",Integer.class));
+        signals.add(new SignalInfo("app_open_showed"));
 
         signals.add(new SignalInfo("user_earned_rewarded", String.class, Integer.class));
 
@@ -847,6 +848,7 @@ public class AdMob extends org.godotengine.godot.plugin.GodotPlugin {
                         public void onAdShowedFullScreenContent() {
                             // Called when fullscreen content is shown.
                             Log.d(LOG_TAG_NAME, "Ad showed fullscreen content.");
+                            emitSignal("app_open_showed");
                         }
                     });
             isShowingAd = true;
