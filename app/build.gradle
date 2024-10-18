@@ -1,13 +1,14 @@
 apply plugin: 'com.android.application'
 
 android {
-    compileSdkVersion 32
-    buildToolsVersion '32.0.0'
+    namespace "com.poing.admob"
+    compileSdkVersion 34
+    buildToolsVersion '34.0.0'
 
     defaultConfig {
         applicationId "com.poing.admob"
         minSdkVersion 19
-        targetSdkVersion 32
+        targetSdkVersion 34
         versionCode 1
         versionName "1.0"
 

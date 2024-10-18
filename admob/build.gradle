@@ -1,8 +1,9 @@
 apply plugin: 'com.android.library'
 
 android {
+    namespace "com.poing.admob"
     compileSdkVersion 34
-    buildToolsVersion '32.0.0'
+    buildToolsVersion '34.0.0'
 
     defaultConfig {
         minSdkVersion 21
