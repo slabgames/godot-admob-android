@@ -2,12 +2,12 @@ apply plugin: 'com.android.library'
 
 android {
     namespace "com.poing.admob"
-    compileSdkVersion 34
+    compileSdkVersion 35
     buildToolsVersion '34.0.0'
 
     defaultConfig {
-        minSdkVersion 21
-        targetSdkVersion 34
+        minSdkVersion 23
+        targetSdkVersion 35
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles 'consumer-rules.pro'
@@ -37,10 +37,10 @@ dependencies {
 
     compileOnly project(':godot-lib')
 
-    implementation 'androidx.appcompat:appcompat:1.7.0'
-    implementation("androidx.lifecycle:lifecycle-process:2.8.4")
+    implementation 'androidx.appcompat:appcompat:1.7.1'
+    implementation("androidx.lifecycle:lifecycle-process:2.9.3")
 
     testImplementation 'junit:junit:4.13.2'
-    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
-    androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
+    androidTestImplementation 'androidx.test.ext:junit:1.3.0'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.7.0'
 }
